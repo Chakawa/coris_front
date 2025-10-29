@@ -1,0 +1,2546 @@
+import 'package:flutter/material.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:mycorislife/config/app_config.dart';
+import 'package:http/http.dart' as http;
+import 'package:mycorislife/services/subscription_service.dart';
+import 'dart:convert';
+import 'dart:io';
+
+class SouscriptionFamilisPage extends StatefulWidget {
+  final Map<String, dynamic>? simulationData;
+  
+  const SouscriptionFamilisPage({super.key, this.simulationData});
+  
+  @override
+  SouscriptionFamilisPageState createState() => SouscriptionFamilisPageState();
+}
+
+class SouscriptionFamilisPageState extends State<SouscriptionFamilisPage>
+    with TickerProviderStateMixin {
+  // Charte graphique CORIS améliorée
+  static const Color bleuCoris = Color(0xFF002B6B);
+  static const Color rougeCoris = Color(0xFFE30613);
+  static const Color bleuSecondaire = Color(0xFF1E4A8C);
+  static const Color blanc = Colors.white;
+  static const Color fondCarte = Color(0xFFF8FAFC);
+  static const Color grisTexte = Color(0xFF64748B);
+  static const Color grisLeger = Color(0xFFF1F5F9);
+  static const Color vertSucces = Color(0xFF10B981);
+  static const Color orangeWarning = Color(0xFFF59E0B);
+
+
+  final PageController _pageController = PageController();
+  late AnimationController _animationController;
+  late AnimationController _progressController;
+  late Animation<double> _fadeAnimation;
+  late Animation<double> _slideAnimation;
+  final List<String> _indicatifs = ['+225', '+226', '+237', '+228', '+229', '+234'];
+  String _selectedBeneficiaireIndicatif = '+225';
+  String _selectedContactIndicatif = '+225';
+
+
+  int _currentStep = 0;
+
+  // Form controllers
+  final _formKey = GlobalKey<FormState>();
+  
+  // Step 1 controllers
+  final _capitalController = TextEditingController();
+  final _dureeController = TextEditingController();
+  String _selectedPeriodicite = 'annuel';
+  DateTime? _dateEffetContrat;
+  DateTime? _dateEcheanceContrat;
+  int? _age;
+
+  // Step 2 controllers
+  final _beneficiaireNomController = TextEditingController();
+  final _beneficiaireContactController = TextEditingController();
+  String _selectedLienParente = 'Enfant';
+  final _personneContactNomController = TextEditingController();
+  final _personneContactTelController = TextEditingController();
+  String _selectedLienParenteUrgence = 'Parent';
+
+  File? _pieceIdentite;
+
+  // Options de lien de parenté
+  final List<String> _lienParenteOptions = [
+    'Enfant',
+    'Conjoint',
+    'Parent',
+    'Frère/Sœur',
+    'Ami',
+    'Autre'
+  ];
+  // Tables de taux pour Coris Familis (à compléter avec vos données)
+  Map<int, Map<int, double>> tauxUnique = {
+     18: {
+    1: 0.272, 2: 0.552, 3: 0.831, 4: 1.106, 5: 1.375, 6: 1.636, 7: 1.892, 8: 2.141, 9: 2.385, 10: 2.625,
+    11: 2.859, 12: 3.090, 13: 3.316, 14: 3.536, 15: 3.754, 16: 3.971, 17: 4.189, 18: 4.407, 19: 4.627, 20: 4.849
+  },
+  19: {
+    1: 0.290, 2: 0.579, 3: 0.865, 4: 1.143, 5: 1.414, 6: 1.678, 7: 1.936, 8: 2.190, 9: 2.438, 10: 2.681,
+    11: 2.920, 12: 3.154, 13: 3.383, 14: 3.609, 15: 3.833, 16: 4.059, 17: 4.285, 18: 4.513, 19: 4.743, 20: 4.976
+  },
+  20: {
+    1: 0.300, 2: 0.596, 3: 0.884, 4: 1.165, 5: 1.439, 6: 1.707, 7: 1.969, 8: 2.227, 9: 2.479, 10: 2.727,
+    11: 2.969, 12: 3.206, 13: 3.440, 14: 3.673, 15: 3.907, 16: 4.141, 17: 4.378, 18: 4.616, 19: 4.856, 20: 5.104
+  },
+  21: {
+    1: 0.306, 2: 0.608, 3: 0.897, 4: 1.181, 5: 1.458, 6: 1.730, 7: 1.997, 8: 2.259, 9: 2.515, 10: 2.767,
+    11: 3.013, 12: 3.255, 13: 3.496, 14: 3.739, 15: 3.982, 16: 4.227, 17: 4.474, 18: 4.724, 19: 4.979, 20: 5.240
+  },
+  22: {
+    1: 0.310, 2: 0.612, 3: 0.907, 4: 1.194, 5: 1.476, 6: 1.753, 7: 2.024, 8: 2.290, 9: 2.551, 10: 2.805,
+    11: 3.057, 12: 3.307, 13: 3.558, 14: 3.810, 15: 4.064, 16: 4.321, 17: 4.580, 18: 4.844, 19: 5.115, 20: 5.393
+  },
+  23: {
+    1: 0.313, 2: 0.618, 3: 0.916, 4: 1.209, 5: 1.496, 6: 1.777, 7: 2.052, 8: 2.323, 9: 2.587, 10: 2.848,
+    11: 3.107, 12: 3.368, 13: 3.629, 14: 3.892, 15: 4.158, 16: 4.427, 17: 4.701, 18: 4.981, 19: 5.270, 20: 5.567
+  },
+  24: {
+    1: 0.317, 2: 0.626, 3: 0.929, 4: 1.226, 5: 1.517, 6: 1.803, 7: 2.084, 8: 2.358, 9: 2.628, 10: 2.897,
+    11: 3.167, 12: 3.438, 13: 3.711, 14: 3.986, 15: 4.265, 16: 4.549, 17: 4.840, 18: 5.139, 19: 5.447, 20: 5.763
+  },
+  25: {
+    1: 0.320, 2: 0.635, 3: 0.943, 4: 1.245, 5: 1.541, 6: 1.832, 7: 2.116, 8: 2.396, 9: 2.675, 10: 2.955,
+    11: 3.236, 12: 3.519, 13: 3.805, 14: 4.094, 15: 4.388, 16: 4.689, 17: 5.000, 18: 5.319, 19: 5.647, 20: 5.984
+  },
+  26: {
+    1: 0.326, 2: 0.645, 3: 0.959, 4: 1.268, 5: 1.567, 6: 1.862, 7: 2.152, 8: 2.441, 9: 2.732, 10: 3.023,
+    11: 3.316, 12: 3.612, 13: 3.912, 14: 4.217, 15: 4.530, 16: 4.852, 17: 5.182, 18: 5.523, 19: 5.872, 20: 6.231
+  },
+  27: {
+    1: 0.331, 2: 0.656, 3: 0.975, 4: 1.287, 5: 1.593, 6: 1.894, 7: 2.194, 8: 2.495, 9: 2.797, 10: 3.101,
+    11: 3.408, 12: 3.719, 13: 4.035, 14: 4.359, 15: 4.693, 16: 5.036, 17: 5.389, 18: 5.751, 19: 6.123, 20: 6.503
+  },
+  28: {
+    1: 0.337, 2: 0.667, 3: 0.991, 4: 1.308, 5: 1.620, 6: 1.931, 7: 2.243, 8: 2.556, 9: 2.872, 10: 3.190,
+    11: 3.512, 12: 3.841, 13: 4.176, 14: 4.522, 15: 4.878, 16: 5.244, 17: 5.620, 18: 6.005, 19: 6.399, 20: 6.799
+  },
+  29: {
+    1: 0.343, 2: 0.679, 3: 1.007, 4: 1.331, 5: 1.653, 6: 1.977, 7: 2.301, 8: 2.629, 9: 2.959, 10: 3.293,
+    11: 3.633, 12: 3.981, 13: 4.340, 14: 4.709, 15: 5.088, 16: 5.478, 17: 5.878, 18: 6.286, 19: 6.701, 20: 7.119
+  },
+  30: {
+    1: 0.348, 2: 0.689, 3: 1.025, 4: 1.359, 5: 1.695, 6: 2.031, 7: 2.371, 8: 2.713, 9: 3.059, 10: 3.412,
+    11: 3.773, 12: 4.145, 13: 4.528, 14: 4.921, 15: 5.326, 16: 5.740, 17: 6.164, 18: 6.593, 19: 7.027, 20: 7.463
+  },
+  31: {
+    1: 0.353, 2: 0.702, 3: 1.048, 4: 1.396, 5: 1.745, 6: 2.097, 7: 2.452, 8: 2.812, 9: 3.178, 10: 3.552,
+    11: 3.938, 12: 4.335, 13: 4.743, 14: 5.162, 15: 5.592, 16: 6.031, 17: 6.476, 18: 6.927, 19: 7.380, 20: 7.836
+  },
+  32: {
+    1: 0.361, 2: 0.721, 3: 1.082, 4: 1.444, 5: 1.809, 6: 2.177, 7: 2.550, 8: 2.929, 9: 3.318, 10: 3.718,
+    11: 4.129, 12: 4.552, 13: 4.987, 14: 5.433, 15: 5.888, 16: 6.351, 17: 6.818, 18: 7.288, 19: 7.761, 20: 8.236
+  },
+  33: {
+    1: 0.373, 2: 0.747, 3: 1.123, 4: 1.501, 5: 1.883, 6: 2.270, 7: 2.663, 8: 3.066, 9: 3.481, 10: 3.908,
+    11: 4.347, 12: 4.798, 13: 5.260, 14: 5.733, 15: 6.212, 16: 6.696, 17: 7.184, 18: 7.674, 19: 8.166, 20: 8.664
+  },
+  34: {
+    1: 0.388, 2: 0.778, 3: 1.171, 4: 1.567, 5: 1.968, 6: 2.376, 7: 2.794, 8: 3.225, 9: 3.667, 10: 4.122,
+    11: 4.590, 12: 5.070, 13: 5.560, 14: 6.057, 15: 6.559, 16: 7.065, 17: 7.574, 18: 8.086, 19: 8.600, 20: 9.118
+  },
+  35: {
+    1: 0.404, 2: 0.812, 3: 1.222, 4: 1.639, 5: 2.062, 6: 2.496, 7: 2.942, 8: 3.401, 9: 3.874, 10: 4.359,
+    11: 4.857, 12: 5.365, 13: 5.881, 14: 6.402, 15: 6.927, 16: 7.454, 17: 7.985, 18: 8.519, 19: 9.057, 20: 9.597
+  },
+  36: {
+    1: 0.423, 2: 0.849, 3: 1.281, 4: 1.720, 5: 2.170, 6: 2.633, 7: 3.110, 8: 3.600, 9: 4.103, 10: 4.620,
+    11: 5.147, 12: 5.682, 13: 6.223, 14: 6.768, 15: 7.315, 16: 7.866, 17: 8.420, 18: 8.978, 19: 9.539, 20: 10.103
+  },
+  37: {
+    1: 0.442, 2: 0.890, 3: 1.347, 4: 1.813, 5: 2.294, 6: 2.789, 7: 3.297, 8: 3.820, 9: 4.356, 10: 4.903,
+    11: 5.458, 12: 6.019, 13: 6.585, 14: 7.153, 15: 7.724, 16: 8.299, 17: 8.878, 18: 9.460, 19: 10.045, 20: 10.633
+  },
+  38: {
+    1: 0.465, 2: 0.938, 3: 1.423, 4: 1.922, 5: 2.435, 6: 2.963, 7: 3.505, 8: 4.061, 9: 4.629, 10: 5.206,
+    11: 5.788, 12: 6.375, 13: 6.965, 14: 7.558, 15: 8.155, 16: 8.755, 17: 9.359, 18: 9.967, 19: 10.577, 20: 11.188
+  },
+  39: {
+    1: 0.491, 2: 0.994, 3: 1.512, 4: 2.045, 5: 2.593, 6: 3.156, 7: 3.734, 8: 4.323, 9: 4.929, 10: 5.526,
+    11: 6.135, 12: 6.747, 13: 7.363, 14: 7.983, 15: 8.606, 16: 9.233, 17: 9.864, 18: 10.497, 19: 11.142, 20: 11.803
+  },
+  40: {
+    1: 0.522, 2: 1.060, 3: 1.613, 4: 2.182, 5: 2.767, 6: 3.366, 7: 3.979, 8: 4.600, 9: 5.228, 10: 5.860,
+    11: 6.496, 12: 7.135, 13: 7.779, 14: 8.426, 15: 9.077, 16: 9.732, 17: 10.389, 18: 11.059, 19: 11.745, 20: 12.455
+  },
+  41: {
+    1: 0.559, 2: 1.133, 3: 1.724, 4: 2.331, 5: 2.954, 6: 3.590, 7: 4.236, 8: 4.888, 9: 5.544, 10: 6.205,
+    11: 6.869, 12: 7.537, 13: 8.209, 14: 8.886, 15: 9.566, 16: 10.249, 17: 10.944, 18: 11.657, 19: 12.394, 20: 13.153
+  },
+  42: {
+    1: 0.597, 2: 1.211, 3: 1.842, 4: 2.489, 5: 3.149, 6: 3.820, 7: 4.497, 8: 5.180, 9: 5.866, 10: 6.556,
+    11: 7.250, 12: 7.948, 13: 8.651, 14: 9.358, 15: 10.067, 16: 10.790, 17: 11.530, 18: 12.296, 19: 13.085, 20: 13.903
+  },
+  43: {
+    1: 0.638, 2: 1.294, 3: 1.966, 4: 2.653, 5: 3.350, 6: 4.054, 7: 4.763, 8: 5.476, 9: 6.193, 10: 6.915,
+    11: 7.640, 12: 8.371, 13: 9.105, 14: 9.843, 15: 10.594, 16: 11.363, 17: 12.159, 18: 12.979, 19: 13.829, 20: 14.707
+  },
+  44: {
+    1: 0.682, 2: 1.381, 3: 2.095, 4: 2.819, 5: 3.561, 6: 4.289, 7: 5.030, 8: 5.775, 9: 6.525, 10: 7.280,
+    11: 8.040, 12: 8.803, 13: 9.570, 14: 10.351, 15: 11.150, 16: 11.978, 17: 12.830, 18: 13.715, 19: 14.627, 20: 15.564
+  },
+  45: {
+    1: 0.727, 2: 1.470, 3: 2.223, 4: 2.985, 5: 3.752, 6: 4.522, 7: 5.298, 8: 6.078, 9: 6.863, 10: 7.653,
+    11: 8.447, 12: 9.244, 13: 10.057, 14: 10.888, 15: 11.749, 16: 12.636, 17: 13.555, 18: 14.505, 19: 15.479, 20: 16.484
+  },
+  46: {
+    1: 0.773, 2: 1.557, 3: 2.349, 4: 3.147, 5: 3.949, 6: 4.756, 7: 5.568, 8: 6.384, 9: 7.206, 10: 8.032,
+    11: 8.862, 12: 9.707, 13: 10.573, 14: 11.468, 15: 12.391, 16: 13.348, 17: 14.335, 18: 15.349, 19: 16.395, 20: 17.468
+  },
+  47: {
+    1: 0.816, 2: 1.641, 3: 2.471, 4: 3.306, 5: 4.146, 6: 4.991, 7: 5.841, 8: 6.697, 9: 7.557, 10: 8.420,
+    11: 9.300, 12: 10.201, 13: 11.133, 14: 12.093, 15: 13.089, 16: 14.117, 17: 15.172, 18: 16.261, 19: 17.378, 20: 18.519
+  },
+  48: {
+    1: 0.859, 2: 1.724, 3: 2.593, 4: 3.467, 5: 4.347, 6: 5.232, 7: 6.123, 8: 7.019, 9: 7.918, 10: 8.834,
+    11: 9.772, 12: 10.743, 13: 11.743, 14: 12.780, 15: 13.850, 16: 14.949, 17: 16.083, 18: 17.245, 19: 18.434, 20: 19.634
+  },
+  49: {
+    1: 0.901, 2: 1.806, 3: 2.717, 4: 3.634, 5: 4.568, 6: 5.484, 7: 6.417, 8: 7.354, 9: 8.308, 10: 9.285,
+    11: 10.298, 12: 11.337, 13: 12.418, 14: 13.533, 15: 14.678, 16: 15.889, 17: 17.070, 18: 18.308, 19: 19.558, 20: 20.818
+  },
+  50: {
+    1: 0.943, 2: 1.893, 3: 2.848, 4: 3.809, 5: 4.776, 6: 5.748, 7: 6.724, 8: 7.719, 9: 8.736, 10: 9.790,
+    11: 10.875, 12: 12.001, 13: 13.163, 14: 14.356, 15: 15.587, 16: 16.849, 17: 18.139, 18: 19.441, 19: 20.755, 20: 22.077
+  },
+  51: {
+    1: 0.990, 2: 1.985, 3: 2.987, 4: 3.995, 5: 5.008, 6: 6.026, 7: 7.063, 8: 8.124, 9: 9.222, 10: 10.354,
+    11: 11.527, 12: 12.739, 13: 13.982, 14: 15.265, 15: 16.580, 16: 17.925, 17: 19.283, 18: 20.652, 19: 22.030, 20: 23.416
+  },
+  52: {
+    1: 1.038, 2: 2.083, 3: 3.134, 4: 4.191, 5: 5.252, 6: 6.333, 7: 7.440, 8: 8.586, 9: 9.765, 10: 10.989,
+    11: 12.253, 12: 13.549, 13: 14.887, 14: 16.259, 15: 17.662, 16: 19.078, 17: 20.505, 18: 21.943, 19: 23.388, 20: 24.839
+  },
+  53: {
+    1: 1.090, 2: 2.187, 3: 3.289, 4: 4.396, 5: 5.524, 6: 6.679, 7: 7.874, 8: 9.105, 9: 10.382, 10: 11.700,
+    11: 13.053, 12: 14.448, 13: 15.880, 14: 17.343, 15: 18.820, 16: 20.310, 17: 21.810, 18: 23.318, 19: 24.832, 20: 26.347
+  },
+  54: {
+    1: 1.145, 2: 2.296, 3: 3.451, 4: 4.629, 5: 5.834, 6: 7.081, 7: 8.366, 8: 9.699, 9: 11.074, 10: 12.488,
+    11: 13.943, 12: 15.437, 13: 16.965, 14: 18.507, 15: 20.062, 16: 21.627, 17: 23.201, 18: 24.781, 19: 26.363, 20: 27.943
+  },
+  55: {
+    1: 1.202, 2: 2.408, 3: 3.638, 4: 4.896, 5: 6.199, 6: 7.541, 7: 8.933, 8: 10.369, 9: 11.844, 10: 13.365,
+    11: 14.925, 12: 16.521, 13: 18.131, 14: 19.754, 15: 21.389, 16: 23.032, 17: 24.683, 18: 26.335, 19: 27.985, 20: 29.629
+  },
+  56: {
+    1: 1.261, 2: 2.545, 3: 3.860, 4: 5.221, 5: 6.623, 6: 8.077, 7: 9.578, 8: 11.119, 9: 12.708, 10: 14.338,
+    11: 16.005, 12: 17.687, 13: 19.384, 14: 21.091, 15: 22.809, 16: 24.533, 17: 26.259, 18: 27.983, 19: 29.700, 20: 31.409
+  },
+  57: {
+    1: 1.343, 2: 2.717, 3: 4.140, 4: 5.605, 5: 7.126, 6: 8.694, 7: 10.305, 8: 11.966, 9: 13.670, 10: 15.413,
+    11: 17.171, 12: 18.944, 13: 20.729, 14: 22.525, 15: 24.327, 16: 26.132, 17: 27.933, 18: 29.729, 19: 31.515, 20: 33.289
+  },
+  58: {
+    1: 1.438, 2: 2.928, 3: 4.459, 4: 6.049, 5: 7.690, 6: 9.375, 7: 11.113, 8: 12.896, 9: 14.718, 10: 16.558,
+    11: 18.413, 12: 20.280, 13: 22.158, 14: 24.043, 15: 25.931, 16: 27.816, 17: 29.694, 18: 31.562, 19: 33.418, 20: 37.315
+  },
+  59: {
+    1: 1.568, 2: 3.163, 3: 4.823, 4: 6.546, 5: 8.310, 6: 10.130, 7: 11.996, 8: 13.904, 9: 15.830, 10: 17.772,
+    11: 19.727, 12: 21.693, 13: 23.667, 14: 25.643, 15: 27.617, 16: 29.551, 17: 31.539, 18: 33.482, 19: 35.409, 20: 37.315
+  },
+  60: {
+    1: 1.682, 2: 3.427, 3: 5.228, 4: 7.076, 5: 8.983, 6: 10.939, 7: 12.939, 8: 14.958, 9: 16.993, 10: 19.042,
+    11: 21.102, 12: 23.171, 13: 25.243, 14: 27.311, 15: 29.371, 16: 31.421, 17: 33.458, 18: 35.477, 19: 37.476, 20: 39.454
+  },
+  61: {
+    1: 1.831, 2: 3.720, 3: 5.660, 4: 7.661, 5: 9.713, 6: 11.811, 7: 13.929, 8: 16.064, 9: 18.214, 10: 20.376,
+    11: 22.546, 12: 24.720, 13: 26.890, 14: 29.052, 15: 31.202, 16: 33.339, 17: 35.458, 18: 37.554, 19: 39.630, 20: 41.687
+  },
+  62: {
+    1: 1.985, 2: 4.022, 3: 6.124, 4: 8.280, 5: 10.485, 6: 12.709, 7: 14.953, 8: 17.211, 9: 19.483, 10: 21.763,
+    11: 24.046, 12: 26.326, 13: 28.597, 14: 30.857, 15: 33.102, 16: 35.327, 17: 37.530, 18: 39.711, 19: 41.871, 20: 44.007
+  },
+  63: {
+    1: 2.143, 2: 4.356, 3: 6.623, 4: 8.942, 5: 11.282, 6: 13.642, 7: 16.016, 8: 18.407, 9: 20.806, 10: 23.208,
+    11: 25.606, 12: 27.996, 13: 30.373, 14: 32.735, 15: 35.076, 16: 37.395, 17: 39.687, 18: 41.960, 19: 44.207, 20: 46.418
+  },
+  64: {
+    1: 2.330, 2: 4.719, 3: 7.162, 4: 9.627, 5: 12.114, 6: 14.616, 7: 17.133, 8: 19.661, 9: 22.191, 10: 24.717,
+    11: 27.234, 12: 29.738, 13: 32.226, 14: 34.693, 15: 37.134, 16: 39.551, 17: 41.945, 18: 44.312, 19: 46.641, 20: 48.922
+  },
+  65: {
+    1: 2.521, 2: 5.099, 3: 7.700, 4: 10.324, 5: 12.965, 6: 15.621, 7: 18.287, 8: 20.957, 9: 23.623, 10: 26.279,
+    11: 28.921, 12: 31.547, 13: 34.149, 14: 36.725, 15: 39.275, 16: 41.801, 17: 44.299, 18: 46.757, 19: 49.153, 20: 51.465
+  },
+  };
+
+  Map<int, Map<int, double>> tauxAnnuel = {
+    18: {
+    1: 0.272, 2: 0.281, 3: 0.287, 4: 0.292, 5: 0.295, 6: 0.298, 7: 0.300, 8: 0.302, 9: 0.305, 10: 0.307,
+    11: 0.309, 12: 0.311, 13: 0.314, 14: 0.316, 15: 0.318, 16: 0.321, 17: 0.324, 18: 0.327, 19: 0.330, 20: 0.334
+  },
+  19: {
+    1: 0.290, 2: 0.295, 3: 0.299, 4: 0.301, 5: 0.303, 6: 0.305, 7: 0.307, 8: 0.309, 9: 0.312, 10: 0.314,
+    11: 0.316, 12: 0.318, 13: 0.320, 14: 0.322, 15: 0.325, 16: 0.328, 17: 0.331, 18: 0.335, 19: 0.339, 20: 0.343
+  },
+  20: {
+    1: 0.300, 2: 0.303, 3: 0.305, 4: 0.307, 5: 0.309, 6: 0.311, 7: 0.313, 8: 0.315, 9: 0.317, 10: 0.319,
+    11: 0.321, 12: 0.323, 13: 0.326, 14: 0.328, 15: 0.331, 16: 0.335, 17: 0.339, 18: 0.343, 19: 0.347, 20: 0.352
+  },
+  21: {
+    1: 0.306, 2: 0.308, 3: 0.310, 4: 0.311, 5: 0.313, 6: 0.315, 7: 0.317, 8: 0.319, 9: 0.321, 10: 0.324,
+    11: 0.326, 12: 0.328, 13: 0.331, 14: 0.334, 15: 0.338, 16: 0.342, 17: 0.346, 18: 0.351, 19: 0.356, 20: 0.362
+  },
+  22: {
+    1: 0.310, 2: 0.311, 3: 0.313, 4: 0.315, 5: 0.317, 6: 0.319, 7: 0.321, 8: 0.324, 9: 0.326, 10: 0.328,
+    11: 0.331, 12: 0.334, 13: 0.337, 14: 0.341, 15: 0.345, 16: 0.350, 17: 0.354, 18: 0.360, 19: 0.366, 20: 0.373
+  },
+  23: {
+    1: 0.313, 2: 0.315, 3: 0.317, 4: 0.319, 5: 0.321, 6: 0.323, 7: 0.326, 8: 0.328, 9: 0.331, 10: 0.333,
+    11: 0.336, 12: 0.340, 13: 0.344, 14: 0.348, 15: 0.353, 16: 0.358, 17: 0.364, 18: 0.370, 19: 0.377, 20: 0.385
+  },
+  24: {
+    1: 0.317, 2: 0.318, 3: 0.321, 4: 0.323, 5: 0.326, 6: 0.328, 7: 0.331, 8: 0.333, 9: 0.336, 10: 0.339,
+    11: 0.343, 12: 0.347, 13: 0.352, 14: 0.357, 15: 0.362, 16: 0.368, 17: 0.375, 18: 0.382, 19: 0.390, 20: 0.399
+  },
+  25: {
+    1: 0.320, 2: 0.323, 3: 0.326, 4: 0.328, 5: 0.331, 6: 0.334, 7: 0.336, 8: 0.339, 9: 0.342, 10: 0.346,
+    11: 0.350, 12: 0.355, 13: 0.361, 14: 0.366, 15: 0.373, 16: 0.380, 17: 0.387, 18: 0.396, 19: 0.405, 20: 0.414
+  },
+  26: {
+    1: 0.326, 2: 0.329, 3: 0.331, 4: 0.334, 5: 0.337, 6: 0.339, 7: 0.342, 8: 0.345, 9: 0.349, 10: 0.354,
+    11: 0.359, 12: 0.365, 13: 0.371, 14: 0.378, 15: 0.385, 16: 0.393, 17: 0.402, 18: 0.411, 19: 0.421, 20: 0.432
+  },
+  27: {
+    1: 0.331, 2: 0.334, 3: 0.337, 4: 0.340, 5: 0.342, 6: 0.345, 7: 0.349, 8: 0.353, 9: 0.358, 10: 0.363,
+    11: 0.369, 12: 0.376, 13: 0.383, 14: 0.391, 15: 0.399, 16: 0.408, 17: 0.418, 18: 0.429, 19: 0.440, 20: 0.451
+  },
+  28: {
+    1: 0.337, 2: 0.340, 3: 0.342, 4: 0.345, 5: 0.348, 6: 0.352, 7: 0.356, 8: 0.362, 9: 0.368, 10: 0.374,
+    11: 0.381, 12: 0.388, 13: 0.396, 14: 0.405, 15: 0.415, 16: 0.425, 17: 0.436, 18: 0.448, 19: 0.460, 20: 0.472
+  },
+  29: {
+    1: 0.343, 2: 0.345, 3: 0.348, 4: 0.351, 5: 0.355, 6: 0.360, 7: 0.366, 8: 0.372, 9: 0.379, 10: 0.386,
+    11: 0.394, 12: 0.403, 13: 0.412, 14: 0.422, 15: 0.433, 16: 0.445, 17: 0.457, 18: 0.469, 19: 0.482, 20: 0.495
+  },
+  30: {
+    1: 0.348, 2: 0.351, 3: 0.354, 4: 0.358, 5: 0.364, 6: 0.370, 7: 0.377, 8: 0.384, 9: 0.392, 10: 0.400,
+    11: 0.409, 12: 0.419, 13: 0.430, 14: 0.442, 15: 0.454, 16: 0.466, 17: 0.480, 18: 0.493, 19: 0.506, 20: 0.519
+  },
+  31: {
+    1: 0.353, 2: 0.357, 3: 0.362, 4: 0.368, 5: 0.375, 6: 0.382, 7: 0.390, 8: 0.398, 9: 0.407, 10: 0.417,
+    11: 0.427, 12: 0.439, 13: 0.451, 14: 0.464, 15: 0.477, 16: 0.491, 17: 0.504, 18: 0.518, 19: 0.532, 20: 0.546
+  },
+  32: {
+    1: 0.361, 2: 0.367, 3: 0.374, 4: 0.381, 5: 0.389, 6: 0.397, 7: 0.406, 8: 0.415, 9: 0.425, 10: 0.436,
+    11: 0.448, 12: 0.461, 13: 0.475, 14: 0.488, 15: 0.503, 16: 0.517, 17: 0.532, 18: 0.546, 19: 0.561, 20: 0.575
+  },
+  33: {
+    1: 0.373, 2: 0.380, 3: 0.388, 4: 0.396, 5: 0.405, 6: 0.414, 7: 0.424, 8: 0.435, 9: 0.446, 10: 0.459,
+    11: 0.472, 12: 0.486, 13: 0.501, 14: 0.516, 15: 0.531, 16: 0.546, 17: 0.561, 18: 0.576, 19: 0.591, 20: 0.606
+  },
+  34: {
+    1: 0.388, 2: 0.396, 3: 0.405, 4: 0.414, 5: 0.423, 6: 0.433, 7: 0.445, 8: 0.457, 9: 0.471, 10: 0.485,
+    11: 0.499, 12: 0.515, 13: 0.530, 14: 0.546, 15: 0.562, 16: 0.577, 17: 0.593, 18: 0.608, 19: 0.623, 20: 0.639
+  },
+  35: {
+    1: 0.404, 2: 0.413, 3: 0.423, 4: 0.433, 5: 0.444, 6: 0.455, 7: 0.469, 8: 0.483, 9: 0.497, 10: 0.513,
+    11: 0.529, 12: 0.545, 13: 0.561, 14: 0.578, 15: 0.594, 16: 0.610, 17: 0.626, 18: 0.642, 19: 0.658, 20: 0.674
+  },
+  36: {
+    1: 0.423, 2: 0.432, 3: 0.443, 4: 0.454, 5: 0.467, 6: 0.481, 7: 0.496, 8: 0.511, 9: 0.527, 10: 0.544,
+    11: 0.561, 12: 0.578, 13: 0.595, 14: 0.612, 15: 0.628, 16: 0.645, 17: 0.661, 18: 0.678, 19: 0.694, 20: 0.711
+  },
+  37: {
+    1: 0.442, 2: 0.453, 3: 0.466, 4: 0.479, 5: 0.494, 6: 0.509, 7: 0.526, 8: 0.543, 9: 0.560, 10: 0.578,
+    11: 0.596, 12: 0.613, 13: 0.630, 14: 0.647, 15: 0.664, 16: 0.681, 17: 0.698, 18: 0.714, 19: 0.731, 20: 0.750
+  },
+  38: {
+    1: 0.465, 2: 0.478, 3: 0.492, 4: 0.508, 5: 0.524, 6: 0.542, 7: 0.559, 8: 0.578, 9: 0.596, 10: 0.614,
+    11: 0.633, 12: 0.650, 13: 0.668, 14: 0.685, 15: 0.703, 16: 0.720, 17: 0.738, 18: 0.756, 19: 0.774, 20: 0.792
+  },
+  39: {
+    1: 0.491, 2: 0.506, 3: 0.523, 4: 0.541, 5: 0.559, 6: 0.577, 7: 0.596, 8: 0.615, 9: 0.634, 10: 0.653,
+    11: 0.671, 12: 0.689, 13: 0.707, 14: 0.725, 15: 0.743, 16: 0.761, 17: 0.780, 18: 0.798, 19: 0.817, 20: 0.838
+  },
+  40: {
+    1: 0.522, 2: 0.540, 3: 0.558, 4: 0.577, 5: 0.596, 6: 0.616, 7: 0.636, 8: 0.656, 9: 0.675, 10: 0.694,
+    11: 0.712, 12: 0.730, 13: 0.749, 14: 0.767, 15: 0.786, 16: 0.804, 17: 0.823, 18: 0.843, 19: 0.864, 20: 0.886
+  },
+  41: {
+    1: 0.559, 2: 0.578, 3: 0.597, 4: 0.617, 5: 0.637, 6: 0.658, 7: 0.678, 8: 0.697, 9: 0.717, 10: 0.735,
+    11: 0.754, 12: 0.773, 13: 0.792, 14: 0.811, 15: 0.830, 16: 0.849, 17: 0.870, 18: 0.891, 19: 0.914, 20: 0.939
+  },
+  42: {
+    1: 0.597, 2: 0.617, 3: 0.638, 4: 0.659, 5: 0.680, 6: 0.700, 7: 0.720, 8: 0.740, 9: 0.759, 10: 0.778,
+    11: 0.797, 12: 0.817, 13: 0.836, 14: 0.856, 15: 0.875, 16: 0.896, 17: 0.919, 18: 0.943, 19: 0.968, 20: 0.996
+  },
+  43: {
+    1: 0.638, 2: 0.659, 3: 0.681, 4: 0.703, 5: 0.724, 6: 0.744, 7: 0.764, 8: 0.783, 9: 0.803, 10: 0.822,
+    11: 0.842, 12: 0.862, 13: 0.882, 14: 0.902, 15: 0.924, 16: 0.948, 17: 0.971, 18: 0.998, 19: 1.027, 20: 1.057
+  },
+  44: {
+    1: 0.682, 2: 0.704, 3: 0.726, 4: 0.747, 5: 0.768, 6: 0.788, 7: 0.807, 8: 0.827, 9: 0.847, 10: 0.867,
+    11: 0.887, 12: 0.908, 13: 0.928, 14: 0.951, 15: 0.974, 16: 1.000, 17: 1.026, 18: 1.058, 19: 1.090, 20: 1.123
+  },
+  45: {
+    1: 0.727, 2: 0.749, 3: 0.771, 4: 0.791, 5: 0.812, 6: 0.831, 7: 0.851, 8: 0.872, 9: 0.892, 10: 0.913,
+    11: 0.934, 12: 0.955, 13: 0.978, 14: 1.003, 15: 1.029, 16: 1.058, 17: 1.089, 18: 1.123, 19: 1.157, 20: 1.194
+  },
+  46: {
+    1: 0.773, 2: 0.794, 3: 0.815, 4: 0.835, 5: 0.855, 6: 0.875, 7: 0.896, 8: 0.917, 9: 0.938, 10: 0.960,
+    11: 0.981, 12: 1.005, 13: 1.030, 14: 1.058, 15: 1.088, 16: 1.121, 17: 1.156, 18: 1.192, 19: 1.230, 20: 1.270
+  },
+  47: {
+    1: 0.816, 2: 0.837, 3: 0.857, 4: 0.878, 5: 0.898, 6: 0.919, 7: 0.941, 8: 0.963, 9: 0.985, 10: 1.008,
+    11: 1.032, 12: 1.058, 13: 1.087, 14: 1.119, 15: 1.153, 16: 1.189, 17: 1.227, 18: 1.267, 19: 1.309, 20: 1.353
+  },
+  48: {
+    1: 0.859, 2: 0.879, 3: 0.900, 4: 0.921, 5: 0.943, 6: 0.965, 7: 0.987, 8: 1.010, 9: 1.034, 10: 1.059,
+    11: 1.086, 12: 1.117, 13: 1.150, 14: 1.186, 15: 1.224, 16: 1.263, 17: 1.306, 18: 1.349, 19: 1.395, 20: 1.441
+  },
+  49: {
+    1: 0.901, 2: 0.922, 3: 0.943, 4: 0.966, 5: 0.988, 6: 1.012, 7: 1.036, 8: 1.060, 9: 1.086, 10: 1.115,
+    11: 1.147, 12: 1.181, 13: 1.219, 14: 1.259, 15: 1.301, 16: 1.345, 17: 1.391, 18: 1.439, 19: 1.487, 20: 1.535
+  },
+  50: {
+    1: 0.943, 2: 0.966, 3: 0.989, 4: 1.013, 5: 1.037, 6: 1.062, 7: 1.087, 8: 1.114, 9: 1.144, 10: 1.178,
+    11: 1.214, 12: 1.254, 13: 1.296, 14: 1.340, 15: 1.386, 16: 1.435, 17: 1.485, 18: 1.535, 19: 1.586, 20: 1.637
+  },
+  51: {
+    1: 0.990, 2: 1.013, 3: 1.038, 4: 1.063, 5: 1.088, 6: 1.114, 7: 1.143, 8: 1.174, 9: 1.210, 10: 1.248,
+    11: 1.290, 12: 1.334, 13: 1.381, 14: 1.429, 15: 1.480, 16: 1.533, 17: 1.586, 18: 1.639, 19: 1.693, 20: 1.747
+  },
+  52: {
+    1: 1.038, 2: 1.064, 3: 1.090, 4: 1.116, 5: 1.142, 6: 1.172, 7: 1.205, 8: 1.243, 9: 1.283, 10: 1.326,
+    11: 1.375, 12: 1.423, 13: 1.475, 14: 1.528, 15: 1.584, 16: 1.639, 17: 1.695, 18: 1.751, 19: 1.808, 20: 1.866
+  },
+  53: {
+    1: 1.090, 2: 1.117, 3: 1.144, 4: 1.171, 5: 1.203, 6: 1.238, 7: 1.277, 8: 1.320, 9: 1.367, 10: 1.417,
+    11: 1.469, 12: 1.523, 13: 1.579, 14: 1.637, 15: 1.696, 16: 1.754, 17: 1.813, 18: 1.873, 19: 1.933, 20: 1.993
+  },
+  54: {
+    1: 1.145, 2: 1.173, 3: 1.201, 4: 1.234, 5: 1.271, 6: 1.314, 7: 1.360, 8: 1.409, 9: 1.462, 10: 1.517,
+    11: 1.574, 12: 1.633, 13: 1.694, 14: 1.756, 15: 1.817, 16: 1.879, 17: 1.941, 18: 2.004, 19: 2.067, 20: 2.131
+  },
+  55: {
+    1: 1.202, 2: 1.231, 3: 1.266, 4: 1.306, 5: 1.352, 6: 1.401, 7: 1.454, 8: 1.510, 9: 1.568, 10: 1.629,
+    11: 1.691, 12: 1.755, 13: 1.820, 14: 1.884, 15: 1.949, 16: 2.014, 17: 2.080, 18: 2.146, 19: 2.212, 20: 2.279
+  },
+  56: {
+    1: 1.261, 2: 1.301, 3: 1.344, 4: 1.394, 5: 1.447, 6: 1.503, 7: 1.563, 8: 1.624, 9: 1.688, 10: 1.754,
+    11: 1.821, 12: 1.889, 13: 1.956, 14: 2.024, 15: 2.092, 16: 2.160, 17: 2.229, 18: 2.299, 19: 2.369, 20: 2.439
+  },
+  57: {
+    1: 1.343, 2: 1.389, 3: 1.443, 4: 1.499, 5: 1.559, 6: 1.622, 7: 1.686, 8: 1.753, 9: 1.822, 10: 1.893,
+    11: 1.964, 12: 2.034, 13: 2.104, 14: 2.176, 15: 2.247, 16: 2.319, 17: 2.392, 18: 2.465, 19: 2.538, 20: 2.612
+  },
+  58: {
+    1: 1.438, 2: 1.497, 3: 1.556, 4: 1.620, 5: 1.686, 6: 1.753, 7: 1.824, 8: 1.896, 9: 1.970, 10: 2.044,
+    11: 2.117, 12: 2.191, 13: 2.265, 14: 2.339, 15: 2.414, 16: 2.490, 17: 2.566, 18: 2.643, 19: 2.720, 20: 2.797
+  },
+  59: {
+    1: 1.568, 2: 1.619, 3: 1.686, 4: 1.759, 5: 1.826, 6: 1.899, 7: 1.975, 8: 2.053, 9: 2.129, 10: 2.205,
+    11: 2.282, 12: 2.359, 13: 2.436, 14: 2.515, 15: 2.594, 16: 2.673, 17: 2.753, 18: 2.833, 19: 2.914, 20: 2.996
+  },
+  60: {
+    1: 1.682, 2: 1.755, 3: 1.828, 4: 1.901, 5: 1.978, 6: 2.057, 7: 2.138, 8: 2.218, 9: 2.297, 10: 2.376,
+    11: 2.456, 12: 2.537, 13: 2.619, 14: 2.701, 15: 2.784, 16: 2.867, 17: 2.951, 18: 3.036, 19: 3.122, 20: 3.208
+  },
+  61: {
+    1: 1.831, 2: 1.906, 3: 1.981, 4: 2.062, 5: 2.144, 6: 2.229, 7: 2.311, 8: 2.393, 9: 2.475, 10: 2.558,
+    11: 2.642, 12: 2.727, 13: 2.813, 14: 2.899, 15: 2.986, 16: 3.074, 17: 3.163, 18: 3.252, 19: 3.343, 20: 3.436
+  },
+  62: {
+    1: 1.965, 2: 2.062, 3: 2.147, 4: 2.233, 5: 2.321, 6: 2.407, 7: 2.491, 8: 2.577, 9: 2.663, 10: 2.750,
+    11: 2.838, 12: 2.927, 13: 3.017, 14: 3.108, 15: 3.200, 16: 3.293, 17: 3.387, 18: 3.483, 19: 3.580, 20: 3.679
+  },
+  63: {
+    1: 2.143, 2: 2.234, 3: 2.325, 4: 2.417, 5: 2.505, 6: 2.593, 7: 2.681, 8: 2.770, 9: 2.861, 10: 2.953,
+    11: 3.045, 12: 3.139, 13: 3.234, 14: 3.330, 15: 3.428, 16: 3.526, 17: 3.627, 18: 3.729, 19: 3.833, 20: 3.939
+  },
+  64: {
+    1: 2.330, 2: 2.423, 3: 2.518, 4: 2.608, 5: 2.698, 6: 2.789, 7: 2.881, 8: 2.975, 9: 3.071, 10: 3.167,
+    11: 3.265, 12: 3.364, 13: 3.465, 14: 3.567, 15: 3.670, 16: 3.776, 17: 3.884, 18: 3.994, 19: 4.105, 20: 4.217
+  },
+  65: {
+    1: 2.521, 2: 2.620, 3: 2.712, 4: 2.804, 5: 2.897, 6: 2.993, 7: 3.090, 8: 3.189, 9: 3.290, 10: 3.392,
+    11: 3.496, 12: 3.601, 13: 3.708, 14: 3.817, 15: 3.928, 16: 4.042, 17: 4.158, 18: 4.277, 19: 4.395, 20: 4.512
+  }
+
+  };
+
+  final storage = const FlutterSecureStorage();
+  double? _calculatedPrime;
+
+  @override
+  void initState() {
+    super.initState();
+    _animationController = AnimationController(
+      duration: const Duration(milliseconds: 800),
+      vsync: this,
+    );
+    _progressController = AnimationController(
+      duration: const Duration(milliseconds: 1000),
+      vsync: this,
+    );
+
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
+    );
+
+    _slideAnimation = Tween<double>(begin: 50.0, end: 0.0).animate(
+      CurvedAnimation(parent: _animationController, curve: Curves.easeOutCubic),
+    );
+
+    _animationController.forward();
+    
+    // Pré-remplir avec les données de simulation si disponibles
+    _prefillSimulationData();
+    
+    // Charger les données utilisateur
+    _loadUserData();
+  }
+
+  void _prefillSimulationData() {
+    if (widget.simulationData != null) {
+      final data = widget.simulationData!;
+      
+      if (data['capital'] != null) {
+        _capitalController.text = _formatNumber(data['capital'].toDouble());
+      }
+      
+      if (data['duree'] != null) {
+        _dureeController.text = data['duree'].toString();
+      }
+      
+      if (data['periodicite'] != null) {
+        _selectedPeriodicite = data['periodicite'];
+      }
+      
+      // Déclencher le calcul si toutes les données sont disponibles
+      if (_age != null && _capitalController.text.isNotEmpty && _dureeController.text.isNotEmpty) {
+        _calculatePrime();
+      }
+    }
+  }
+
+  // Méthode pour charger les données utilisateur
+  Future<void> _loadUserData() async {
+    try {
+      final userData = await _loadUserDataForRecap();
+      if (userData.isNotEmpty && userData['age'] != null) {
+        if (mounted) {
+          setState(() {
+            _age = userData['age'];
+          });
+        }
+        
+        // Déclencher le calcul si les données de simulation sont disponibles
+        if (_capitalController.text.isNotEmpty && _dureeController.text.isNotEmpty) {
+          _calculatePrime();
+        }
+      } else {
+        if (mounted) {
+          _showErrorSnackBar('Impossible de déterminer votre âge');
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        debugPrint('Erreur lors du chargement des données utilisateur: $e');
+        _showErrorSnackBar('Erreur lors du chargement de vos informations');
+      }
+    }
+  }
+
+  String _formatNumber(double number) {
+    return number.toStringAsFixed(0).replaceAllMapped(
+      RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+      (Match m) => '${m[1]} ',
+    );
+  }
+
+  void _formatMontantInput() {
+    final text = _capitalController.text.replaceAll(' ', '');
+    if (text.isNotEmpty) {
+      final value = double.tryParse(text);
+      if (value != null) {
+        _capitalController.text = _formatNumber(value);
+        _capitalController.selection = TextSelection.fromPosition(
+          TextPosition(offset: _capitalController.text.length),
+        );
+      }
+    }
+  }
+
+  double _parseDouble(String text) {
+    final cleaned = text.replaceAll(' ', '').replaceAll(',', '.');
+    return double.tryParse(cleaned) ?? 0.0;
+  }
+
+  int _parseInt(String text) {
+    final cleaned = text.replaceAll(' ', '');
+    return int.tryParse(cleaned) ?? 0;
+  }
+
+  double _findRateInTable({
+    required int age,
+    required int dureeAnnees,
+  }) {
+    final Map<int, Map<int, double>> selectedTable = 
+        _selectedPeriodicite == 'unique' ? tauxUnique : tauxAnnuel;
+    
+    if (!selectedTable.containsKey(age)) {
+      final ages = selectedTable.keys.toList()..sort();
+      int closestAge = ages.first;
+      for (int a in ages) {
+        if (a >= age) {
+          closestAge = a;
+          break;
+        }
+      }
+      if (closestAge > ages.last) closestAge = ages.last;
+      age = closestAge;
+    }
+    
+    if (!selectedTable[age]!.containsKey(dureeAnnees)) {
+      final durees = selectedTable[age]!.keys.toList()..sort();
+      int closestDuree = durees.first;
+      for (int d in durees) {
+        if (d >= dureeAnnees) {
+          closestDuree = d;
+          break;
+        }
+      }
+      if (closestDuree > durees.last) closestDuree = durees.last;
+      dureeAnnees = closestDuree;
+    }
+    
+    return selectedTable[age]![dureeAnnees]!;
+  }
+
+  void _calculatePrime() {
+    if (_age == null || _capitalController.text.isEmpty || _dureeController.text.isEmpty) {
+      return;
+    }
+
+    final capital = _parseDouble(_capitalController.text);
+    int dureeAnnees = _parseInt(_dureeController.text);
+    
+    final taux = _findRateInTable(age: _age!, dureeAnnees: dureeAnnees);
+    final primeTotal = (capital * (taux / 100)).clamp(0, double.infinity);
+
+    if (mounted) {
+      setState(() {
+        _calculatedPrime = primeTotal.toDouble();
+      });
+    }
+  }
+
+  void _showErrorSnackBar(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(Icons.error_outline, color: blanc),
+            const SizedBox(width: 12),
+            Text(message),
+          ],
+        ),
+        backgroundColor: rougeCoris,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: const EdgeInsets.all(16),
+      ),
+    );
+  }
+
+  void _showSuccessSnackBar(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(Icons.check_circle, color: blanc),
+            const SizedBox(width: 12),
+            Text(message),
+          ],
+        ),
+        backgroundColor: vertSucces,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: const EdgeInsets.all(16),
+      ),
+    );
+  }
+
+  Future<void> _pickDocument() async {
+    try {
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png'],
+      );
+
+      if (result != null) {
+        if (mounted) {
+          setState(() {
+            _pieceIdentite = File(result.files.single.path!);
+          });
+          _showSuccessSnackBar('Document ajouté avec succès');
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        _showErrorSnackBar('Erreur lors de la sélection du fichier');
+      }
+    }
+  }
+
+  String _formatDate(String dateString) {
+    try {
+      final date = DateTime.parse(dateString);
+      return "${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}";
+    } catch (e) {
+      return dateString;
+    }
+  }
+
+  Future<Map<String, dynamic>> _loadUserDataForRecap() async {
+    try {
+      final token = await storage.read(key: 'token');
+      if (token == null) {
+        throw Exception('Token non trouvé');
+      }
+      final response = await http.get(
+        Uri.parse('${AppConfig.baseUrl}/auth/profile'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['success'] == true) {
+          final userData = data['user'];
+          if (userData['date_naissance'] != null) {
+            final dateNaissance = DateTime.parse(userData['date_naissance']);
+            final maintenant = DateTime.now();
+            int age = maintenant.year - dateNaissance.year;
+            if (maintenant.month < dateNaissance.month || 
+                (maintenant.month == dateNaissance.month && maintenant.day < dateNaissance.day)) {
+              age--;
+            }
+            userData['age'] = age;
+          }
+          return userData;
+        } else {
+          throw Exception(data['message'] ?? 'Erreur lors de la récupération des données');
+        }
+      } else {
+        throw Exception('Erreur serveur: ${response.statusCode}');
+      }
+    } catch (e) {
+      debugPrint('Erreur lors du chargement des données utilisateur: $e');
+      return {};
+    }
+  }
+
+  void _nextStep() {
+    if (_currentStep < 2) {
+      bool canProceed = false;
+
+      if (_currentStep == 0 && _validateStep1()) {
+        canProceed = true;
+      } else if (_currentStep == 1 && _validateStep2()) {
+        canProceed = true;
+      }
+
+      if (canProceed) {
+        setState(() => _currentStep++);
+        _progressController.forward();
+        _animationController.reset();
+        _animationController.forward();
+
+        _pageController.nextPage(
+          duration: const Duration(milliseconds: 400),
+          curve: Curves.easeInOutCubic,
+        );
+      }
+    }
+  }
+
+  void _previousStep() {
+    if (_currentStep > 0) {
+      setState(() => _currentStep--);
+      _progressController.reverse();
+      _animationController.reset();
+      _animationController.forward();
+
+      _pageController.previousPage(
+        duration: const Duration(milliseconds: 400),
+        curve: Curves.easeInOutCubic,
+      );
+    }
+  }
+
+  bool _validateStep1() {
+    if (_capitalController.text.trim().isEmpty) {
+      _showErrorSnackBar('Veuillez saisir le capital à garantir');
+      return false;
+    }
+
+    if (_dureeController.text.trim().isEmpty) {
+      _showErrorSnackBar('Veuillez saisir la durée du contrat');
+      return false;
+    }
+
+    if (_age == null) {
+      _showErrorSnackBar('Chargement des informations en cours...');
+      return false;
+    }
+
+    if (_age! < 18 || _age! > 65) {
+      _showErrorSnackBar('L\'âge doit être compris entre 18 et 65 ans. Votre âge: $_age ans');
+      return false;
+    }
+
+    return true;
+  }
+
+  bool _validateStep2() {
+    if (_beneficiaireNomController.text.trim().isEmpty ||
+        _beneficiaireContactController.text.trim().isEmpty ||
+        _personneContactNomController.text.trim().isEmpty ||
+        _personneContactTelController.text.trim().isEmpty ||
+        _pieceIdentite == null) {
+      _showErrorSnackBar('Veuillez remplir tous les champs obligatoires');
+      return false;
+    }
+    return true;
+  }
+
+  void _showPaymentOptions() async {
+    try {
+      await _saveSubscriptionData();
+      if (mounted) {
+        showModalBottomSheet(
+          context: context,
+          isScrollControlled: true,
+          backgroundColor: Colors.transparent,
+          builder: (context) => PaymentBottomSheet(
+            onPayNow: (paymentMethod) {
+              if (mounted) {
+                Navigator.pop(context);
+              }
+              _processPayment(paymentMethod);
+            },
+            onPayLater: () {
+              if (mounted) {
+                Navigator.pop(context);
+              }
+              _saveAsProposition();
+            },
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        _showErrorSnackBar('Erreur lors de la sauvegarde: $e');
+      }
+    }
+  }
+
+ Future<int> _saveSubscriptionData() async {
+  try {
+    final subscriptionService = SubscriptionService();
+    
+    final capital = _parseDouble(_capitalController.text);
+    final duree = int.parse(_dureeController.text);
+
+    final subscriptionData = {
+      'product_type': 'coris_familis',
+      'capital': capital,
+      'duree': duree,
+      'periodicite': _selectedPeriodicite,
+      'prime': _calculatedPrime,
+      'age': _age,
+      'beneficiaire': {
+        'nom': _beneficiaireNomController.text.trim(),
+        'contact': _beneficiaireContactController.text.trim(),
+        'lien_parente': _selectedLienParente,
+      },
+      'contact_urgence': {
+        'nom': _personneContactNomController.text.trim(),
+        'contact': _personneContactTelController.text.trim(),
+        'lien_parente': _selectedLienParenteUrgence,
+      },
+      'date_effet': _dateEffetContrat?.toIso8601String(),
+      'date_echeance': _dateEcheanceContrat?.toIso8601String(),
+      'piece_identite': _pieceIdentite?.path.split('/').last ?? '',
+      // NE PAS inclure 'status' ici - il sera 'proposition' par défaut dans la base
+    };
+
+    final response = await subscriptionService.createSubscription(subscriptionData);
+    final responseData = jsonDecode(response.body);
+    
+    if (response.statusCode != 201 || !responseData['success']) {
+      throw Exception(responseData['message'] ?? 'Erreur lors de la sauvegarde');
+    }
+    
+    // RETOURNER l'ID de la souscription créée
+    return responseData['data']['id'];
+    
+  } catch (e) {
+    debugPrint('Erreur sauvegarde souscription: $e');
+    rethrow;
+  }
+}
+
+
+Future<void> _updatePaymentStatus(int subscriptionId, bool paymentSuccess, {String? paymentMethod}) async {
+  try {
+    final subscriptionService = SubscriptionService();
+    final response = await subscriptionService.updatePaymentStatus(
+      subscriptionId, 
+      paymentSuccess,
+      paymentMethod: paymentMethod,
+    );
+    
+    final responseData = jsonDecode(response.body);
+    
+    if (response.statusCode != 200 || !responseData['success']) {
+      throw Exception(responseData['message'] ?? 'Erreur lors de la mise à jour du statut');
+    }
+    
+    debugPrint('Statut mis à jour: ${paymentSuccess ? 'contrat' : 'proposition'}');
+    
+  } catch (e) {
+    debugPrint('Erreur mise à jour statut: $e');
+    rethrow;
+  }
+}
+
+
+
+Future<bool> _simulatePayment(String paymentMethod) async {
+  // Simulation d'un délai de paiement
+  await Future.delayed(const Duration(seconds: 2));
+  
+  // Pour la démo, retournez true pour succès, false pour échec
+  return true; // Changez en false pour tester l'échec
+}
+
+
+  void _processPayment(String paymentMethod) async {
+  if (!mounted) return;
+  showDialog(
+    context: context, 
+    barrierDismissible: false, 
+    builder: (context) => LoadingDialog(paymentMethod: paymentMethod),
+  );
+ 
+  try {
+    // ÉTAPE 1: Sauvegarder la souscription (statut: 'proposition' par défaut)
+    final subscriptionId = await _saveSubscriptionData();
+    
+    // ÉTAPE 2: Simuler le paiement
+    final paymentSuccess = await _simulatePayment(paymentMethod);
+    
+    // ÉTAPE 3: Mettre à jour le statut selon le résultat du paiement
+    await _updatePaymentStatus(subscriptionId, paymentSuccess, paymentMethod: paymentMethod);
+    
+    if (mounted) {
+      Navigator.pop(context); // Fermer le loading
+      
+      if (paymentSuccess) {
+        _showSuccessDialog(true); // Contrat activé
+      } else {
+        _showErrorSnackBar('Paiement échoué. Votre proposition a été sauvegardée.');
+      }
+    }
+    
+  } catch (e) {
+    if (mounted) {
+      Navigator.pop(context);
+      _showErrorSnackBar('Erreur lors du traitement: $e');
+    }
+  }
+}
+
+  void _saveAsProposition() async {
+  try {
+    // Sauvegarde avec statut 'proposition' par défaut
+    await _saveSubscriptionData();
+    if (mounted) {
+      _showSuccessDialog(false);
+    }
+  } catch (e) {
+    if (mounted) {
+      _showErrorSnackBar('Erreur lors de la sauvegarde: $e');
+    }
+  }
+}
+
+  void _showSuccessDialog(bool isPaid) {
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => SuccessDialog(isPaid: isPaid),
+    );
+  }
+
+  void _selectDateEffet() async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: DateTime.now(),
+      firstDate: DateTime.now(),
+      lastDate: DateTime(2100),
+    );
+    if (picked != null) {
+      if (mounted) {
+        setState(() {
+          _dateEffetContrat = picked;
+          final duree = int.tryParse(_dureeController.text) ?? 0;
+          _dateEcheanceContrat = DateTime(picked.year + duree, picked.month, picked.day);
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: grisLeger,
+      body: NestedScrollView(
+        headerSliverBuilder: (BuildContext context, bool innerBoxIsScrolled) {
+          return <Widget>[
+            SliverAppBar(
+              expandedHeight: 120,
+              floating: false,
+              pinned: true,
+              elevation: 0,
+              backgroundColor: bleuCoris,
+              flexibleSpace: FlexibleSpaceBar(
+                background: Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [bleuCoris, bleuSecondaire],
+                    ),
+                  ),
+                  child: SafeArea(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          Row(
+                            children: [
+                              const Icon(Icons.family_restroom, color: blanc, size: 28),
+                              const SizedBox(width: 12),
+                              Text(
+                                'CORIS FAMILIS',
+                                style: const TextStyle(
+                                  color: blanc,
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Protégez votre famille avec une assurance capital décès',
+                            style: TextStyle(
+                              color: blanc.withValues(alpha: 0.9),
+                              fontSize: 14,
+                              fontWeight: FontWeight.w400,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              leading: IconButton(
+                icon: const Icon(Icons.arrow_back_ios, color: blanc),
+                onPressed: () => Navigator.pop(context),
+              ),
+            ),
+            SliverToBoxAdapter(
+              child: Container(
+                margin: const EdgeInsets.all(20),
+                child: _buildModernProgressIndicator(),
+              ),
+            ),
+          ];
+        },
+        body: Column(
+          children: [
+            Expanded(
+              child: PageView(
+                controller: _pageController,
+                physics: const NeverScrollableScrollPhysics(),
+                children: [
+                  _buildStep1(),
+                  _buildStep2(),
+                  _buildStep3(),
+                ],
+              ),
+            ),
+            _buildNavigationButtons(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildModernProgressIndicator() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: blanc,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 20,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          for (int i = 0; i < 3; i++) ...[
+            Expanded(
+              child: Column(
+                children: [
+                  Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: i <= _currentStep ? bleuCoris : grisLeger,
+                      shape: BoxShape.circle,
+                      boxShadow: i <= _currentStep ? [
+                        BoxShadow(
+                          color: bleuCoris.withValues(alpha: 0.3),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ] : null,
+                    ),
+                    child: Icon(
+                      i == 0 ? Icons.account_balance_wallet :
+                      i == 1 ? Icons.person_add : Icons.check_circle,
+                      color: i <= _currentStep ? blanc : grisTexte,
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    i == 0 ? 'Paramètres' : i == 1 ? 'Informations' : 'Validation',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: i <= _currentStep ? FontWeight.w600 : FontWeight.w400,
+                      color: i <= _currentStep ? bleuCoris : grisTexte,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (i < 2)
+              Expanded(
+                child: Container(
+                  height: 2,
+                  margin: const EdgeInsets.only(bottom: 20, left: 6, right: 6),
+                  decoration: BoxDecoration(
+                    color: i < _currentStep ? bleuCoris : grisLeger,
+                    borderRadius: BorderRadius.circular(1),
+                  ),
+                ),
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStep1() {
+  return AnimatedBuilder(
+    animation: _fadeAnimation,
+    builder: (context, child) {
+      return Transform.translate(
+        offset: Offset(0, _slideAnimation.value),
+        child: Opacity(
+          opacity: _fadeAnimation.value,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: ListView(
+              children: [
+                // Carte principale de simulation
+                Container(
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.1),
+                        blurRadius: 12,
+                        offset: const Offset(0, 6),
+                      ),
+                    ],
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // En-tête avec icône et titre
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: bleuCoris.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Icon(Icons.settings, color: bleuCoris, size: 22),
+                            ),
+                            const SizedBox(width: 12),
+                            const Text(
+                              "Paramètres de souscription",
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF002B6B),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 20),
+                        
+                        // Champ pour le capital
+                        _buildCapitalField(),
+                        const SizedBox(height: 16),
+                        
+                        // Sélecteur de périodicité
+                        _buildPeriodiciteDropdown(),
+                        const SizedBox(height: 16),
+                        
+                        // Champ pour la durée
+                        _buildDureeField(),
+                        const SizedBox(height: 16),
+                        
+                        // Champ date d'effet
+                        _buildDateEffetField(),
+                        const SizedBox(height: 20),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    },
+  );
+}
+  Widget _buildCapitalField() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Capital à garantir',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+            color: bleuCoris,
+          ),
+        ),
+        const SizedBox(height: 6),
+        TextField(
+          controller: _capitalController,
+          keyboardType: TextInputType.number,
+          onChanged: (value) {
+            _formatMontantInput();
+            _calculatePrime();
+          },
+          decoration: InputDecoration(
+            isDense: true,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+            hintText: 'Ex: 5 000 000',
+            hintStyle: const TextStyle(fontSize: 14),
+            prefixIcon: Icon(Icons.monetization_on, size: 20, color: bleuCoris.withValues(alpha: 0.7)),
+            suffixText: 'FCFA',
+            filled: true,
+            fillColor: fondCarte,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide.none,
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide(color: bleuCoris, width: 1.5),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPeriodiciteDropdown() {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.1),
+            blurRadius: 10,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16.0),
+        child: DropdownButtonFormField<String>(
+          value: _selectedPeriodicite,
+          decoration: const InputDecoration(
+            border: InputBorder.none,
+            prefixIcon: Icon(Icons.calendar_today, color: Color(0xFF002B6B)),
+            labelText: 'Périodicité',
+          ),
+          items: const [
+            DropdownMenuItem(
+              value: 'annuel',
+              child: Text('Paiement annuel'),
+            ),
+            DropdownMenuItem(
+              value: 'unique',
+              child: Text('Paiement unique'),
+            ),
+          ],
+          onChanged: (String? newValue) {
+            setState(() {
+              _selectedPeriodicite = newValue!;
+              _calculatePrime();
+            });
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDureeField() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Durée du contrat',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+            color: bleuCoris,
+          ),
+        ),
+        const SizedBox(height: 6),
+        TextField(
+          controller: _dureeController,
+          keyboardType: TextInputType.number,
+          onChanged: (value) {
+            _calculatePrime();
+            if (_dateEffetContrat != null && value.isNotEmpty) {
+              final duree = int.tryParse(value) ?? 0;
+              setState(() {
+                _dateEcheanceContrat = DateTime(
+                  _dateEffetContrat!.year + duree,
+                  _dateEffetContrat!.month,
+                  _dateEffetContrat!.day,
+                );
+              });
+            }
+          },
+          decoration: InputDecoration(
+            isDense: true,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+            hintText: 'Durée en années',
+            hintStyle: const TextStyle(fontSize: 14),
+            prefixIcon: Icon(Icons.calendar_month, size: 20, color: bleuCoris.withValues(alpha: 0.7)),
+            suffixText: 'ans',
+            filled: true,
+            fillColor: fondCarte,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide.none,
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide(color: bleuCoris, width: 1.5),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDateEffetField() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Date d\'effet du contrat',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+            color: bleuCoris,
+          ),
+        ),
+        const SizedBox(height: 6),
+        GestureDetector(
+          onTap: _selectDateEffet,
+          child: AbsorbPointer(
+            child: TextFormField(
+              controller: TextEditingController(
+                text: _dateEffetContrat != null 
+                  ? '${_dateEffetContrat!.day}/${_dateEffetContrat!.month}/${_dateEffetContrat!.year}' 
+                  : ''
+              ),
+              decoration: InputDecoration(
+                isDense: true,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                hintText: 'Sélectionner une date',
+                hintStyle: const TextStyle(fontSize: 14),
+                prefixIcon: Icon(Icons.calendar_today, size: 20, color: bleuCoris.withValues(alpha: 0.7)),
+                filled: true,
+                fillColor: fondCarte,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide.none,
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide(color: bleuCoris, width: 1.5),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStep2() {
+  return AnimatedBuilder(
+    animation: _fadeAnimation,
+    builder: (context, child) {
+      return Transform.translate(
+        offset: Offset(0, _slideAnimation.value),
+        child: Opacity(
+          opacity: _fadeAnimation.value,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Form(
+              key: _formKey,
+              child: ListView(
+                children: [
+                  _buildFormSection(
+                    'Bénéficiaire en cas de décès',
+                    Icons.family_restroom,
+                    [
+                      _buildModernTextField(
+                        controller: _beneficiaireNomController,
+                        label: 'Nom complet du bénéficiaire',
+                        icon: Icons.person_outline,
+                      ),
+                      const SizedBox(height: 16),
+                      // Champ avec indicatif
+                      _buildPhoneFieldWithIndicatif(
+                        controller: _beneficiaireContactController,
+                        label: 'Contact du bénéficiaire',
+                        selectedIndicatif: _selectedBeneficiaireIndicatif,
+                        onIndicatifChanged: (value) {
+                          setState(() {
+                            _selectedBeneficiaireIndicatif = value!;
+                          });
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      _buildDropdownField(
+                        value: _selectedLienParente,
+                        label: 'Lien de parenté',
+                        icon: Icons.link,
+                        items: _lienParenteOptions,
+                        onChanged: (value) {
+                          setState(() {
+                            _selectedLienParente = value!;
+                          });
+                        },
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  _buildFormSection(
+                    'Contact d\'urgence',
+                    Icons.contact_phone,
+                    [
+                      _buildModernTextField(
+                        controller: _personneContactNomController,
+                        label: 'Nom complet',
+                        icon: Icons.person_outline,
+                      ),
+                      const SizedBox(height: 16),
+                      // Champ avec indicatif
+                      _buildPhoneFieldWithIndicatif(
+                        controller: _personneContactTelController,
+                        label: 'Contact téléphonique',
+                        selectedIndicatif: _selectedContactIndicatif,
+                        onIndicatifChanged: (value) {
+                          setState(() {
+                            _selectedContactIndicatif = value!;
+                          });
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      _buildDropdownField(
+                        value: _selectedLienParenteUrgence,
+                        label: 'Lien de parenté',
+                        icon: Icons.link,
+                        items: _lienParenteOptions,
+                        onChanged: (value) {
+                          setState(() {
+                            _selectedLienParenteUrgence = value!;
+                          });
+                        },
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  _buildDocumentUploadSection(),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    },
+  );
+}
+
+
+Widget _buildPhoneFieldWithIndicatif({
+  required TextEditingController controller,
+  required String label,
+  required String selectedIndicatif,
+  required ValueChanged<String?> onIndicatifChanged,
+}) {
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(label, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: bleuCoris)),
+      const SizedBox(height: 6),
+      Row(
+        children: [
+          // Dropdown pour l'indicatif
+          Container(
+            width: 100,
+            decoration: BoxDecoration(
+              color: fondCarte,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: grisLeger),
+            ),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                value: selectedIndicatif,
+                isExpanded: true,
+                items: _indicatifs.map((String value) {
+                  return DropdownMenuItem<String>(
+  value: value,
+  child: Padding(  
+    padding: const EdgeInsets.symmetric(horizontal: 12),  
+    child: Text(value, style: const TextStyle(fontSize: 14)),  
+  ),);
+                }).toList(),
+                onChanged: onIndicatifChanged,
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          // Champ de téléphone
+          Expanded(
+            child: TextFormField(
+              controller: controller,
+              keyboardType: TextInputType.phone,
+              decoration: InputDecoration(
+                isDense: true,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                hintText: '00 00 00 00',
+                hintStyle: const TextStyle(fontSize: 14),
+                prefixIcon: Icon(Icons.phone_outlined, size: 20, color: bleuCoris.withValues(alpha: 0.7)),
+                filled: true,
+                fillColor: fondCarte,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide.none,
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide(color: bleuCoris, width: 1.5),
+                ),
+              ),
+              validator: (value) {
+                if (value == null || value.trim().isEmpty) {
+                  return 'Ce champ est obligatoire';
+                }
+                if (!RegExp(r'^[0-9]{8,15}$').hasMatch(value.replaceAll(' ', ''))) {
+                  return 'Numéro de téléphone invalide';
+                }
+                return null;
+              },
+            ),
+          ),
+        ],
+      ),
+    ],
+  );
+}
+
+  Widget _buildFormSection(String title, IconData icon, List<Widget> children) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: blanc,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: bleuCoris, size: 20),
+              const SizedBox(width: 12),
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: bleuCoris,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          ...children,
+        ],
+      ),
+    );
+  }
+
+  Widget _buildModernTextField({
+    required TextEditingController controller,
+    required String label,
+    required IconData icon,
+    TextInputType? keyboardType,
+  }) {
+    return TextFormField(
+      controller: controller,
+      keyboardType: keyboardType,
+      decoration: InputDecoration(
+        labelText: label,
+        prefixIcon: Container(
+          margin: const EdgeInsets.all(8),
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: bleuCoris.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(icon, color: bleuCoris, size: 20),
+        ),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: grisLeger),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: grisLeger),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: bleuCoris, width: 2),
+        ),
+        filled: true,
+        fillColor: fondCarte,
+        contentPadding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+      ),
+      validator: (value) {
+        if (value == null || value.trim().isEmpty) {
+          return 'Ce champ est obligatoire';
+        }
+        return null;
+      },
+    );
+  }
+
+  Widget _buildDropdownField({
+    required String? value,
+    required String label,
+    required IconData icon,
+    required List<String> items,
+    required ValueChanged<String?> onChanged,
+  }) {
+    return DropdownButtonFormField<String>(
+      value: value,
+      decoration: InputDecoration(
+        labelText: label,
+        prefixIcon: Container(
+          margin: const EdgeInsets.all(8),
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: bleuCoris.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(icon, color: bleuCoris, size: 20),
+        ),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: grisLeger),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: grisLeger),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: bleuCoris, width: 2),
+        ),
+        filled: true,
+        fillColor: fondCarte,
+        contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+      ),
+      items: items.map((String value) {
+        return DropdownMenuItem<String>(
+          value: value,
+          child: Text(value),
+        );
+      }).toList(),
+      onChanged: onChanged,
+      validator: (value) {
+        if (value == null || value.isEmpty) {
+          return 'Ce champ est obligatoire';
+        }
+        return null;
+      },
+    );
+  }
+
+  Widget _buildDocumentUploadSection() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: blanc,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.document_scanner, color: bleuCoris, size: 20),
+              const SizedBox(width: 12),
+              Text(
+                'Pièce d\'identité',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: bleuCoris,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          GestureDetector(
+            onTap: _pickDocument,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 300),
+              width: double.infinity,
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: _pieceIdentite != null
+                  ? vertSucces.withValues(alpha: 0.1)
+                  : bleuCoris.withValues(alpha: 0.05),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: _pieceIdentite != null
+                    ? vertSucces
+                    : bleuCoris.withValues(alpha: 0.3),
+                  width: 2,
+                ),
+              ),
+              child: Column(
+                children: [
+                  AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 300),
+                    child: Icon(
+                      _pieceIdentite != null
+                        ? Icons.check_circle_outline
+                        : Icons.cloud_upload_outlined,
+                      size: 40,
+                      color: _pieceIdentite != null ? vertSucces : bleuCoris,
+                      key: ValueKey(_pieceIdentite != null),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    _pieceIdentite != null
+                      ? 'Document ajouté avec succès'
+                      : 'Télécharger votre pièce d\'identité',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: _pieceIdentite != null ? vertSucces : bleuCoris,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    _pieceIdentite != null
+                      ? _pieceIdentite!.path.split('/').last
+                      : 'Formats acceptés: PDF, JPG, PNG (Max: 5MB)',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: grisTexte,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStep3() {
+    return AnimatedBuilder(
+      animation: _fadeAnimation,
+      builder: (context, child) {
+        return Transform.translate(
+          offset: Offset(0, _slideAnimation.value),
+          child: Opacity(
+            opacity: _fadeAnimation.value,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: FutureBuilder<Map<String, dynamic>>(
+                future: _loadUserDataForRecap(),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return Center(
+                      child: CircularProgressIndicator(color: bleuCoris),
+                    );
+                  }
+
+                  if (snapshot.hasError) {
+                    return Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.error, size: 48, color: rougeCoris),
+                          const SizedBox(height: 16),
+                          const Text('Erreur lors du chargement des données'),
+                          TextButton(
+                            onPressed: () => setState(() {}),
+                            child: const Text('Réessayer'),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+
+                  final userData = snapshot.data ?? {};
+                  return _buildRecapContent(userData);
+                },
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildRecapContent(Map<String, dynamic> userData) {
+  final capital = _parseDouble(_capitalController.text);
+  final duree = int.tryParse(_dureeController.text) ?? 0;
+  
+  return ListView(
+    children: [
+      // Section Informations Personnelles
+      _buildRecapSection(
+        'Informations Personnelles',
+        Icons.person,
+        bleuCoris,
+        [
+          _buildCombinedRecapRow('Civilité', userData['civilite'] ?? 'Non renseigné', 'Nom', userData['nom'] ?? 'Non renseigné'),
+          _buildCombinedRecapRow('Prénom', userData['prenom'] ?? 'Non renseigné', 'Email', userData['email'] ?? 'Non renseigné'),
+          _buildCombinedRecapRow('Téléphone', userData['telephone'] ?? 'Non renseigné', 'Date de naissance', userData['date_naissance'] != null ? _formatDate(userData['date_naissance']) : 'Non renseigné'),
+          _buildCombinedRecapRow('Lieu de naissance', userData['lieu_naissance'] ?? 'Non renseigné', 'Adresse', userData['adresse'] ?? 'Non renseigné'),
+        ],
+      ),
+
+      const SizedBox(height: 20),
+
+      // Section Produit souscrit
+      _buildRecapSection(
+        'Produit Souscrit',
+        Icons.family_restroom,
+        vertSucces,
+        [
+    _buildCombinedRecapRow('Produit', 'CORIS FAMILIS', 'Durée', '$duree années'),
+    _buildCombinedRecapRow('Prime ${_selectedPeriodicite == 'unique' ? 'unique' : 'annuelle'}', _calculatedPrime != null ? '${_formatNumber(_calculatedPrime!)} FCFA' : 'Non calculée', 'Capital à garantir', '${_formatNumber(capital)} FCFA'),
+    _buildCombinedRecapRow('Date d\'effet', _dateEffetContrat != null ? '${_dateEffetContrat!.day}/${_dateEffetContrat!.month}/${_dateEffetContrat!.year}' : 'Non définie', 'Date d\'échéance', _dateEcheanceContrat != null ? '${_dateEcheanceContrat!.day}/${_dateEcheanceContrat!.month}/${_dateEcheanceContrat!.year}' : 'Non définie'),
+   
+  ],
+      ),
+
+      const SizedBox(height: 20),
+
+      // Section Bénéficiaire et Contact d'urgence
+      _buildRecapSection(
+        'Bénéficiaire et Contact d\'urgence',
+        Icons.contacts,
+        orangeWarning,
+        [
+          _buildSubsectionTitle('Bénéficiaire'),
+          _buildCombinedRecapRow('Nom complet', _beneficiaireNomController.text.isEmpty ? 'Non renseigné' : _beneficiaireNomController.text, 'Contact', _beneficiaireContactController.text.isEmpty ? 'Non renseigné' : _beneficiaireContactController.text),
+          _buildCombinedRecapRow('Lien de parenté', _selectedLienParente, '', ''),
+          
+          const SizedBox(height: 12),
+          _buildSubsectionTitle('Contact d\'urgence'),
+          _buildCombinedRecapRow('Nom complet', _personneContactNomController.text.isEmpty ? 'Non renseigné' : _personneContactNomController.text, 'Contact', _personneContactTelController.text.isEmpty ? 'Non renseigné' : _personneContactTelController.text),
+          _buildCombinedRecapRow('Lien de parenté', _selectedLienParenteUrgence, '', ''),
+        ],
+      ),
+
+      const SizedBox(height: 20),
+
+      // Section Documents
+      _buildRecapSection(
+        'Documents',
+        Icons.description,
+        bleuSecondaire,
+        [
+          _buildCombinedRecapRow('Pièce d\'identité', _pieceIdentite?.path.split('/').last ?? 'Non téléchargée', '', ''),
+        ],
+      ),
+
+      const SizedBox(height: 20),
+
+      // Avertissement
+      Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: orangeWarning.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: orangeWarning.withValues(alpha: 0.3)),
+        ),
+        child: Column(
+          children: [
+            Icon(Icons.info_outline, color: orangeWarning, size: 28),
+            const SizedBox(height: 10),
+            Text(
+              'Vérification Importante',
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                color: orangeWarning,
+                fontSize: 14,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Vérifiez attentivement toutes les informations ci-dessus. Une fois la souscription validée, certaines modifications ne seront plus possibles.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: grisTexte,
+                fontSize: 12,
+                height: 1.4,
+              ),
+            ),
+          ],
+        ),
+      ),
+      const SizedBox(height: 20),
+    ],
+  );
+}
+
+  Widget _buildRecapSection(String title, IconData icon, Color color, List<Widget> children) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: blanc,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Icon(icon, color: color, size: 18),
+              ),
+              const SizedBox(width: 10),
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: color,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          ...children,
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSubsectionTitle(String title) {
+    return Text(
+      title,
+      style: TextStyle(
+        fontWeight: FontWeight.w600,
+        color: bleuCoris,
+        fontSize: 14,
+      ),
+    );
+  }
+
+  Widget _buildCombinedRecapRow(String label1, String value1, String label2, String value2) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '$label1 :',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w500,
+                    color: grisTexte,
+                    fontSize: 12,
+                  ),
+                ),
+                Text(
+                  value1,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: bleuCoris,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '$label2 :',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w500,
+                    color: grisTexte,
+                    fontSize: 12,
+                  ),
+                ),
+                Text(
+                  value2,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: bleuCoris,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNavigationButtons() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: blanc,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 20,
+            offset: const Offset(0, -4),
+          ),
+        ],
+      ),
+      child: SafeArea(
+        child: Row(
+          children: [
+            if (_currentStep > 0)
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: _previousStep,
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: bleuCoris, width: 2),
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.arrow_back, color: bleuCoris, size: 20),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Précédent',
+                        style: TextStyle(
+                          color: bleuCoris,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 16,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            if (_currentStep > 0) const SizedBox(width: 16),
+            Expanded(
+              child: ElevatedButton(
+                onPressed: _currentStep == 2 ? _showPaymentOptions : _nextStep,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: bleuCoris,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  elevation: 0,
+                  shadowColor: bleuCoris.withValues(alpha: 0.3),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      _currentStep == 2 ? 'Finaliser' : 'Suivant',
+                      style: const TextStyle(
+                        color: blanc,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 16,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Icon(
+                      _currentStep == 2 ? Icons.check : Icons.arrow_forward,
+                      color: blanc,
+                      size: 20,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _animationController.dispose();
+    _progressController.dispose();
+    _pageController.dispose();
+    _capitalController.dispose();
+    _dureeController.dispose();
+    _beneficiaireNomController.dispose();
+    _beneficiaireContactController.dispose();
+    _personneContactNomController.dispose();
+    _personneContactTelController.dispose();
+    super.dispose();
+  }
+}
+
+// Dialog de chargement moderne
+class LoadingDialog extends StatelessWidget {
+  final String paymentMethod;
+  const LoadingDialog({super.key, required this.paymentMethod});
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      child: Container(
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.1),
+              blurRadius: 20,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: 60,
+              height: 60,
+              child: const CircularProgressIndicator(
+                color: Color(0xFF002B6B),
+                strokeWidth: 3,
+              ),
+            ),
+            const SizedBox(height: 20),
+            const Text(
+              'Traitement en cours',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF002B6B),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Paiement via $paymentMethod...',
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: Color(0xFF64748B),
+                fontSize: 14,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// Dialog de succès moderne
+class SuccessDialog extends StatelessWidget {
+  final bool isPaid;
+  const SuccessDialog({super.key, required this.isPaid});
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      child: Container(
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.1),
+              blurRadius: 20,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 80,
+              height: 80,
+              decoration: BoxDecoration(
+                color: isPaid ? const Color(0xFF10B981).withValues(alpha: 0.1) : const Color(0xFFF59E0B).withValues(alpha: 0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                isPaid ? Icons.check_circle : Icons.schedule,
+                color: isPaid ? const Color(0xFF10B981) : const Color(0xFFF59E0B),
+                size: 40,
+              ),
+            ),
+            const SizedBox(height: 20),
+            const Text(
+              'Souscription Réussie!',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF002B6B),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              isPaid
+                ? 'Félicitations! Votre contrat CORIS FAMILIS est maintenant actif. Vous recevrez un email de confirmation sous peu.'
+                : 'Votre proposition a été enregistrée avec succès. Vous pouvez effectuer le paiement plus tard depuis votre espace client.',
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: Color(0xFF64748B),
+                fontSize: 14,
+                height: 1.4,
+              ),
+            ),
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () {
+                  Navigator.of(context).popUntil((route) => route.isFirst);
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF002B6B),
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: const Text(
+                  'Retour à l\'accueil',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// Bottom sheet de paiement moderne
+class PaymentBottomSheet extends StatelessWidget {
+  final Function(String) onPayNow;
+  final VoidCallback onPayLater;
+  const PaymentBottomSheet({
+    super.key,
+    required this.onPayNow,
+    required this.onPayLater,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.1),
+            blurRadius: 20,
+            offset: const Offset(0, -4),
+          ),
+        ],
+      ),
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              Row(
+                children: [
+                  Icon(Icons.payment, color: const Color(0xFF002B6B), size: 28),
+                  const SizedBox(width: 12),
+                  const Text(
+                    'Options de Paiement',
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF002B6B),
+                    ),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 24),
+
+              _buildPaymentOption(
+                'Wave',
+                Icons.waves,
+                Colors.blue,
+                'Paiement mobile sécurisé',
+                () => onPayNow('Wave'),
+              ),
+
+              const SizedBox(height: 12),
+
+              _buildPaymentOption(
+                'Orange Money',
+                Icons.phone_android,
+                Colors.orange,
+                'Paiement mobile Orange',
+                () => onPayNow('Orange Money'),
+              ),
+
+              const SizedBox(height: 24),
+
+              Row(
+                children: [
+                  Expanded(child: Divider(color: Colors.grey[300])),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: const Text(
+                      'OU',
+                      style: TextStyle(
+                        color: Color(0xFF64748B),
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                  Expanded(child: Divider(color: Colors.grey[300])),
+                ],
+              ),
+
+              const SizedBox(height: 20),
+
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton(
+                  onPressed: onPayLater,
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: Color(0xFF002B6B), width: 2),
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.schedule, color: const Color(0xFF002B6B)),
+                      const SizedBox(width: 8),
+                      const Text(
+                        'Payer plus tard',
+                        style: TextStyle(
+                          color: Color(0xFF002B6B),
+                          fontWeight: FontWeight.w600,
+                          fontSize: 16,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              SizedBox(height: MediaQuery.of(context).viewInsets.bottom),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPaymentOption(
+    String title,
+    IconData icon,
+    Color color,
+    String subtitle,
+    VoidCallback onTap
+  ) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF8FAFC),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.grey.withValues(alpha: 0.2)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(icon, color: color, size: 24),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF002B6B),
+                      fontSize: 16,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle,
+                    style: const TextStyle(
+                      color: Color(0xFF64748B),
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              Icons.arrow_forward_ios,
+              color: const Color(0xFF64748B),
+              size: 16,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

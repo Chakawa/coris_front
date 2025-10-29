@@ -1,0 +1,45 @@
+name: mycorislife
+description: Application mobile pour Coris Assurance Vie Côte d'Ivoire
+version: 1.0.0
+environment:
+  sdk: '>=2.17.0 <3.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  http: ^1.4.0          # Pour les appels API
+  provider: ^6.0.5       # Gestion d'état
+  shared_preferences: ^2.0.15  # Stockage local (tokens, données hors ligne)
+  sqflite: ^2.0.3        # Base de données locale pour mode hors ligne
+  path_provider: ^2.0.11 # Gestion des chemins pour sqflite
+  flutter_secure_storage: ^9.2.4  # Stockage sécurisé pour tokens
+  cupertino_icons: ^1.0.5  # Icônes par défaut
+  font_awesome_flutter: ^10.6.0
+  file_picker: ^10.2.4
+  flutter_markdown: ^0.6.10+2
+  lucide_icons: ^0.257.0
+  intl: ^0.17.0
+  image_picker: ^0.8.7+4
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0  # Linting pour un code propre
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/etude.png
+    - assets/images/retraite.png
+    - assets/images/epargne.png
+    - assets/images/logo.png
+    - assets/images/emprunteur.png
+    - assets/images/prets.png
+    - assets/images/solidarite.png
+    - assets/images/serenite.png
+    - assets/images/familis.png
+    - assets/images/retraitee.png
+    - assets/images/etudee.png
+    - assets/images/epargnee.png
+    - assets/images/user_avatar.png
+    - assets/images/man.png
